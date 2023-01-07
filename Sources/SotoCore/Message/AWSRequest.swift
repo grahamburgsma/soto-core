@@ -84,8 +84,14 @@ public struct AWSRequest {
         case .empty:
             bodyDataForSigning = nil
         }
-        let signedHeaders = signer.signHeaders(url: url, method: httpMethod, headers: httpHeaders, body: bodyDataForSigning, date: Date())
-        return AWSHTTPRequest(url: url, method: httpMethod, headers: signedHeaders, body: payload)
+        if httpMethod == .GET || httpMethod == .HEAD {
+            assert(self.body.isEmpty, "GET operation \(self.operation) has a payload when it shouldn't")
+            let signedURL = signer.signURL(url: url, method: httpMethod, headers: httpHeaders, expires: .seconds(60), date: Date())
+            return AWSHTTPRequest(url: signedURL, method: httpMethod, headers: httpHeaders, body: payload)
+        } else {
+            let signedHeaders = signer.signHeaders(url: url, method: httpMethod, headers: httpHeaders, body: bodyDataForSigning, date: Date())
+            return AWSHTTPRequest(url: url, method: httpMethod, headers: signedHeaders, body: payload)
+        }
     }
 
     // return new request with middleware applied

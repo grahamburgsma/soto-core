@@ -20,7 +20,17 @@ import SotoTestUtils
 import XCTest
 
 class AWSRequestTests: XCTestCase {
-    struct E: AWSEncodableShape & Decodable {
+    struct TestShapeWithPayload: AWSEncodableShape & Decodable {
+        let Member = ["memberKey": "memberValue", "memberKey2": "memberValue2"]
+
+        private enum CodingKeys: String, CodingKey {
+            case Member
+        }
+    }
+
+    struct TestShapeWithHeaders: AWSEncodableShape & Decodable {
+        static let _encoding = [AWSMemberEncoding(label: "Member", location: .header("query"))]
+
         let Member = ["memberKey": "memberValue", "memberKey2": "memberValue2"]
 
         private enum CodingKeys: String, CodingKey {
@@ -71,7 +81,7 @@ class AWSRequestTests: XCTestCase {
     }
 
     func testCreateNIORequest() {
-        let input2 = E()
+        let input2 = TestShapeWithPayload()
 
         let config = createServiceConfig(region: .useast1, service: "kinesis", serviceProtocol: .json(version: "1.1"))
 
@@ -99,7 +109,7 @@ class AWSRequestTests: XCTestCase {
     }
 
     func testUnsignedClient() {
-        let input = E()
+        let input = TestShapeWithPayload()
         let config = createServiceConfig()
 
         var awsRequest: AWSRequest?
@@ -122,7 +132,6 @@ class AWSRequestTests: XCTestCase {
     }
 
     func testSignedClient() {
-        let input = E()
         let config = createServiceConfig()
 
         let signer = AWSSigner(
@@ -131,14 +140,30 @@ class AWSRequestTests: XCTestCase {
             region: config.region.rawValue
         )
 
-        for httpMethod in [HTTPMethod.GET, .HEAD, .PUT, .DELETE, .POST, .PATCH] {
+        for httpMethod in [HTTPMethod.GET, .HEAD] {
             var awsRequest: AWSRequest?
 
             XCTAssertNoThrow(awsRequest = try AWSRequest(
                 operation: "Test",
                 path: "/",
                 httpMethod: httpMethod,
-                input: input,
+                input: TestShapeWithHeaders(),
+                configuration: config
+            ))
+
+            let request = awsRequest?.createHTTPRequest(signer: signer, serviceConfig: config)
+            let urlComponents = (request?.url).map { URLComponents(url: $0, resolvingAgainstBaseURL: false) } ?? nil
+            XCTAssertNotNil(urlComponents?.queryItems?.first { $0.name == "X-Amz-Signature" })
+        }
+
+        for httpMethod in [HTTPMethod.PUT, .DELETE, .POST, .PATCH] {
+            var awsRequest: AWSRequest?
+
+            XCTAssertNoThrow(awsRequest = try AWSRequest(
+                operation: "Test",
+                path: "/",
+                httpMethod: httpMethod,
+                input: TestShapeWithPayload(),
                 configuration: config
             ))
 
